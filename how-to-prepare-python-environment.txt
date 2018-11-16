@@ -1,0 +1,170 @@
+CentOS 7.5 and Python3.7
+The AMI of Python ec2 instance: CentOS-7-x86_64-EBS-HVM-20180318_121109-877e76fd-a132-410c-9982-c70ca8e41d88-ami-f5cb0388.4 (ami-7d579d00)
+
+1) Prepare Python 3.7
+Please follow the below steps under the root user to install python 3.7 for CentOS 7.5
+
+yum install gcc openssl-devel bzip2-devel  libffi-devel
+cd /tmp
+wget https://www.python.org/ftp/python/3.7.0/Python-3.7.0.tgz
+tar xzf Python-3.7.0.tgz
+cd Python-3.7.0
+./configure --enable-optimizations
+make altinstall
+rm -f /usr/src/Python-3.7.0.tgz
+
+After that, please check the python installation
+[root@ip-172-31-95-82 tmp]# python3.7 -V
+Python 3.7.0
+
+[root@ip-172-31-95-82 tmp]# which python3.7
+/usr/local/bin/python3.7
+
+2) This ec2 instance will have both Python 2.x and Python 3.x, therefore we will install required packages by git sources
+
+[root@ip-172-31-95-82 sensor]# git clone https://github.com/eclipse/paho.mqtt.python
+[root@ip-172-31-95-82 sensor]# cd paho.mqtt.python
+
+
+[root@ip-172-31-95-82 paho.mqtt.python]# python3.7 setup.py install
+[root@ip-172-31-95-82 requests]# cd ..
+[root@ip-172-31-95-82 sensor]# rm -rf paho.mqtt.python
+
+
+[root@ip-172-31-95-82 sensor]# sudo yum -y install mosquitto
+[root@ip-172-31-95-82 sensor]# sudo systemctl start mosquitto
+[root@ip-172-31-95-82 sensor]# sudo systemctl enable mosquitto
+Created symlink from /etc/systemd/system/multi-user.target.wants/mosquitto.service to /usr/lib/systemd/system/mosquitto.service.
+
+
+[root@ip-172-31-95-82 sensor]# git clone git://github.com/requests/requests.git
+[root@ip-172-31-95-82 sensor]# cd requests
+[root@ip-172-31-95-82 requests]# python3.7 setup.py install
+[root@ip-172-31-95-82 requests]# cd ..
+[root@ip-172-31-95-82 sensor]# rm -rf requests
+
+
+[root@ip-172-31-95-82 sensor]# git clone https://github.com/simplejson/simplejson.git
+[root@ip-172-31-95-82 sensor]# cd simplejson
+[root@ip-172-31-95-82 simplejson]# python3.7 setup.py install
+[root@ip-172-31-95-82 simplejson]# cd ..
+[root@ip-172-31-95-82 sensor]# rm -rf simplejson
+
+3) The Sensor Emulator Python source code is created 
+[root@ip-172-31-95-82 sensor]# vi SensorEmulator.py
+
+Please take this code from the same GITHUB
+https://github.com/lequanha/sensors/blob/master/python-generator/SensorEmulator.py
+
+--------------------------------------------------------------------
+
+import paho.mqtt.client as mqtt
+import time
+from threading import Thread
+import random
+import requests
+import sys
+import simplejson as json
+
+def publishData(clientt, topic, delay_time, count):
+    while count > 0:
+        data = random.normalvariate(mean, deviation)
+        dataToSend = "value=" + str(data)
+        print(dataToSend)
+        clientt.publish(topic, data, 0)
+
+        url = topic + str(data)
+        res = requests.post(url, data={}, headers={})
+
+        time.sleep(delay_time)
+        count = count - 1
+    clientt.loop_stop()
+    clientt.disconnect()
+
+def initializeSensorsClusters(mean, deviation, nodedns, X):
+    print("We are initializing " + str(X) + " sensors into the PostgreSQL database...")
+    for si in range(X):
+        name = 'Sensor ' + str(si+1)
+        url = 'http://' + nodedns + ':3000/api/sensor/' + str(si+1) + '/' + name;
+        res = requests.post(url, data={}, headers={})
+        if (res.status_code != requests.codes.ok):
+            print("Sensor " + name + " already exists in the PostgreSQL database")
+    
+    url = 'http://' + nodedns + ':3000/api/cluster/' + str(mean) + '/' + str(deviation)
+    res = requests.get(url, data={}, headers={})
+    if (res.status_code != requests.codes.ok):
+        res = requests.post(url, data={}, headers={})
+        res = requests.get(url, data={}, headers={})
+
+    reqObj = json.loads(res.text)
+    clusterid = reqObj["data"]["clusterid"]
+    return clusterid
+
+def on_connect(client, userdata, rc):
+    print("Connected with result code " + str(rc))
+	
+def on_message(client, userdata, msg):
+    print(msg.topic + " " + str(msg.payload))
+
+
+
+if len(sys.argv) > 1:
+    print('Mean: ', sys.argv[1])
+    mean = float(sys.argv[1])
+else:
+    mean = float(input("Please enter mean value? "))
+
+if len(sys.argv) > 2:
+    print('Deviation: ', sys.argv[2])
+    deviation = float(sys.argv[2])
+else:
+    deviation = float(input("Please enter deviation value? "))
+
+if len(sys.argv) > 3:
+    print('Number of Sources: ', sys.argv[3])
+    X = int(sys.argv[3])
+else:
+    X = input("Please enter Number of Sources? ")
+
+if len(sys.argv) > 4:
+    print('Delay: ', sys.argv[4], ' seconds')
+    Y = int(sys.argv[4])
+else:
+    Y = input("Please enter delaying time in seconds? ")
+
+if len(sys.argv) > 5:
+    print('NodeJS API DNS: ', sys.argv[5])
+    nodedns = sys.argv[5]
+else:
+    nodedns = input("Please enter the NodeJS API public DNS for your PostgreSQL database (Leave it blank / empty for default value = locahost)  ? ")
+    if len(nodedns) == 0:
+        nodedns = 'localhost'
+
+
+
+clusterID = initializeSensorsClusters(mean, deviation, nodedns, X)
+	
+clients = [mqtt.Client("Sensor"+str(i)) for i in range(X)]
+for i in range(X):
+    clients[i].on_connect = on_connect
+    clients[i].on_message = on_message
+    clients[i].connect("127.0.0.1", 1883, 60)
+    clients[i].loop_start()
+    
+
+curlData = 'http://' + nodedns + ':3000/api/data/' + str(clusterID) + '/'
+try:
+    sensors = [Thread(name='sensor'+str(i), target=publishData, args=(clients[i], curlData + str(i+1) + '/', Y, 20)) for i in range(X)]
+    for i in range(X):
+        sensors[i].start()
+except:
+    print("Error: unable to start thread")
+
+while 1:
+    pass
+
+--------------------------------------------------------------------
+
+4) This Python code uses X sources (user input) for means/deviations, and Y delaying seconds
+
+ 
