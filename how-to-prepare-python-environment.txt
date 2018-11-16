@@ -20,6 +20,14 @@ Python 3.7.0
 [root@ip-172-31-95-82 tmp]# which python3.7
 /usr/local/bin/python3.7
 
+Please be careful, because Python 2.7 is a part of CentOS 7.5 and we are unable to uninstall Python 2.7 from CentOS without causing problems, there are 2 versions of Python will be installed at this point. So we also have to call python3.7 to distinguish from python (that is 2.7)
+
+[root@ip-172-31-95-82 sensor]# python -V
+Python 2.7.5
+[root@ip-172-31-95-82 sensor]# python3.7 -V
+Python 3.7.0
+
+
 2) This ec2 instance will have both Python 2.x and Python 3.x, therefore we will install required packages by git sources
 
 [root@ip-172-31-95-82 sensor]# git clone https://github.com/eclipse/paho.mqtt.python
@@ -50,6 +58,7 @@ Created symlink from /etc/systemd/system/multi-user.target.wants/mosquitto.servi
 [root@ip-172-31-95-82 simplejson]# cd ..
 [root@ip-172-31-95-82 sensor]# rm -rf simplejson
 
+
 3) The Sensor Emulator Python source code is created 
 [root@ip-172-31-95-82 sensor]# vi SensorEmulator.py
 
@@ -57,7 +66,6 @@ Please take this code from the same GITHUB
 https://github.com/lequanha/sensors/blob/master/python-generator/SensorEmulator.py
 
 --------------------------------------------------------------------
-
 import paho.mqtt.client as mqtt
 import time
 from threading import Thread
@@ -124,19 +132,19 @@ if len(sys.argv) > 3:
     print('Number of Sources: ', sys.argv[3])
     X = int(sys.argv[3])
 else:
-    X = input("Please enter Number of Sources? ")
+    X = int(input("Please enter Number of Sources? "))
 
 if len(sys.argv) > 4:
     print('Delay: ', sys.argv[4], ' seconds')
     Y = int(sys.argv[4])
 else:
-    Y = input("Please enter delaying time in seconds? ")
+    Y = int(input("Please enter delaying time in seconds? "))
 
 if len(sys.argv) > 5:
     print('NodeJS API DNS: ', sys.argv[5])
     nodedns = sys.argv[5]
 else:
-    nodedns = input("Please enter the NodeJS API public DNS for your PostgreSQL database (Leave it blank / empty for default value = locahost)  ? ")
+    nodedns = input("Please enter the NodeJS API public DNS for your PostgreSQL database (Leave it blank / empty for default value = localhost)  ? ")
     if len(nodedns) == 0:
         nodedns = 'localhost'
 
@@ -162,9 +170,19 @@ except:
 
 while 1:
     pass
-
+ 
 --------------------------------------------------------------------
 
+
 4) This Python code uses X sources (user input) for means/deviations, and Y delaying seconds
+You can execute the Python code as this
+[root@ip-172-31-95-82 python-generator]# python3.7 SensorEmulator.py
+to enter mean, deviation, X, Y and NodeJS ec2 DNS
+
+otherwise we can also using command-line arguments such as
+python3.7 SensorEmulator.py  <mean>  <deviation>  <X>   <Y>  <NodeJS ec2 DNS>
+for example
+[root@ip-172-31-95-82 python-generator]# python3.7 SensorEmulator.py  1234.56  2.1  8  2  ec2-54-173-104-199.compute-1.amazonaws.com
+
 
  
