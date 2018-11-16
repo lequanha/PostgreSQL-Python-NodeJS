@@ -64,19 +64,19 @@ if len(sys.argv) > 3:
     print('Number of Sources: ', sys.argv[3])
     X = int(sys.argv[3])
 else:
-    X = input("Please enter Number of Sources? ")
+    X = int(input("Please enter Number of Sources? "))
 
 if len(sys.argv) > 4:
     print('Delay: ', sys.argv[4], ' seconds')
     Y = int(sys.argv[4])
 else:
-    Y = input("Please enter delaying time in seconds? ")
+    Y = int(input("Please enter delaying time in seconds? "))
 
 if len(sys.argv) > 5:
     print('NodeJS API DNS: ', sys.argv[5])
     nodedns = sys.argv[5]
 else:
-    nodedns = input("Please enter the NodeJS API public DNS for your PostgreSQL database (Leave it blank / empty for default value = locahost)  ? ")
+    nodedns = input("Please enter the NodeJS API public DNS for your PostgreSQL database (Leave it blank / empty for default value = localhost)  ? ")
     if len(nodedns) == 0:
         nodedns = 'localhost'
 
