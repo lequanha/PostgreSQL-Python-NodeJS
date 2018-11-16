@@ -1,0 +1,301 @@
+CENTOS 7.5 
+AMI ID
+CentOS-7-x86_64-EBS-HVM-20180318_121109-877e76fd-a132-410c-9982-c70ca8e41d88-ami-f5cb0388.4 (ami-7d579d00)
+
+Step 1: Install Node 
+[root@ip-172-31-84-126 ~]# mkdir api
+[root@ip-172-31-84-126 ~]# cd api/
+[root@ip-172-31-84-126 api]# yum install wget
+
+[root@ip-172-31-84-126 api]# wget https://nodejs.org/dist/v8.12.0/node-v8.12.0-linux-x64.tar.xz
+
+[root@ip-172-31-84-126 api]# sudo tar --strip-components 1 -xJf node-v* -C /usr/local
+
+[root@ip-172-31-84-126 api]# rm node-v8.12.0-linux-x64.tar.xz
+rm: remove regular file ‘node-v8.12.0-linux-x64.tar.xz’? y
+
+[root@ip-172-31-84-126 api]# ls -lai
+total 0
+8409466 drwxr-xr-x. 2 root root   6 Nov 15 01:57 .
+4268363 dr-xr-x---. 5 root root 126 Nov 15 01:56 ..
+
+[root@ip-172-31-84-126 api]# node --version
+v8.12.0
+ 
+ 
+Step 2: creating RESTful web service with Node, Express, Postgres, and pg-promise.
+Our app will include the following endpoints:
+
+URL						HTTP Verb		Action
+/api/data					GET			list all generated clustered data
+/api/clusters					GET			list all clusters
+/api/sensors					GET			list all sensors  
+/api/data/:id					GET			retrieve one generated data from record id
+/api/data/:clusterid/:sensorid/:data		POST			insert one record of generated clustered data from which sensor, which cluster (mean/deviation)
+/api/cluster/:mean/:deviation			GET			search the cluster id given the mean value and the deviation value
+/api/cluster/:mean/:deviation			POST			insert a new cluster with new mean and new deviation values
+/api/cluster/:mean/:deviation			DELETE			delete a cluster record given the mean value and the deviation value
+/api/sensor/:id/:name				POST			insert a new sensor with a new sensor name
+/api/sensor/:name				DELETE			delete a sensor given name
+
+
+Step 3: Create express nodejs app
+[root@ip-172-31-84-126 api]# npm install express-generator@4 -g
+/usr/local/bin/express -> /usr/local/lib/node_modules/express-generator/bin/express-cli.js
++ express-generator@4.16.0
+added 10 packages from 13 contributors in 0.812s
+
+
+[root@ip-172-31-84-126 api]# express node-api
+[root@ip-172-31-84-126 api]# cd node-api
+[root@ip-172-31-84-126 node-api]# npm install
+
+
+Step 4: Install pg-promise and bluebird
+[root@ip-172-31-84-126 node-api]# npm install pg-promise@5 --save
++ pg-promise@5.9.7
+
+[root@ip-172-31-84-126 node-api]# npm install bluebird@3 --save
++ bluebird@3.5.3
+
+
+Step 5: Under the app root directory, create the below 2 nodejs files
+This NodeJS code links to this RDS, please change it if you wish 
+Endpoint/Hostname: artesianproject.c0pbwgrsqsdx.us-east-1.rds.amazonaws.com
+
+The first file is here
+https://github.com/lequanha/sensors/blob/master/nodejs-api/queries.js
+
+[root@ip-172-31-84-126 node-api]# vi queries.js
+-----------------------------------------------------------------------
+var promise = require('bluebird');
+
+var options = {
+  // Initialization Options
+  promiseLib: promise
+};
+
+var pgp = require('pg-promise')(options);
+var connectionString = 'postgres://artesianproject:artesianproject@artesianproject.c0pbwgrsqsdx.us-east-1.rds.amazonaws.com:5432/artesianproject';
+var db = pgp(connectionString);
+
+// add query functions
+
+module.exports = {
+  getAllData: getAllData,
+  getSingleData: getSingleData,
+  createData: createData,
+  getAllSensors: getAllSensors,
+  getAllClusters: getAllClusters,
+  createCluster: createCluster,
+  removeCluster: removeCluster,
+  createSensor: createSensor,
+  removeSensor: removeSensor,
+  getClusterID: getClusterID
+};
+
+function getAllSensors(req, res, next) {
+  db.any('select * from sensors."sensors" LIMIT 1000')
+    .then(function (data) {
+      res.status(200)
+        .json({
+          status: 'success',
+          data: data,
+          message: 'Retrieved ALL sensors'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function getAllClusters(req, res, next) {
+  db.any('select * from sensors."clusters" LIMIT 1000')
+    .then(function (data) {
+      res.status(200)
+        .json({
+          status: 'success',
+          data: data,
+          message: 'Retrieved ALL clusters'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function getAllData(req, res, next) {
+  db.any('select * from sensors."clustereddata" LIMIT 1000')
+    .then(function (data) {
+      res.status(200)
+        .json({
+          status: 'success',
+          data: data,
+          message: 'Retrieved ALL data'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function getSingleData(req, res, next) {
+  var ID = parseInt(req.params.id);
+  console.log(ID);
+
+  db.one('select * from sensors."clustereddata" where "id" = $1', ID)
+    .then(function (data) {
+      res.status(200)
+        .json({
+          status: 'success',
+          data: data,
+          message: 'Retrieved ONE data'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function createData(req, res, next) {
+  var data =  parseFloat(req.params.data);
+  var clusterid = parseInt(req.params.clusterid);
+  var sensorid = parseInt(req.params.sensorid);
+
+  db.none('insert into sensors."clustereddata"("clusterid", "sensorid", "data") ' +
+      'values(' + clusterid + ', ' + sensorid + ', ' + data + ')',
+    req.body)
+    .then(function () {
+      res.status(200)
+        .json({
+          status: 'success',
+          message: 'Inserted one data'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function getClusterID(req, res, next) {
+  var mean =  parseFloat(req.params.mean);
+  var deviation = parseFloat(req.params.deviation);
+
+  db.one('select "clusterid" from sensors."clusters" where "mean" = ' + mean + ' and "deviation" = ' + deviation)
+    .then(function (data) {
+      res.status(200)
+        .json({
+          status: 'success',
+          data: data,
+          message: 'Retrieved ONE data'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+
+}
+
+function createCluster(req, res, next) {
+  var mean =  parseFloat(req.params.mean);
+  var deviation = parseFloat(req.params.deviation);
+  db.none('insert into sensors."clusters"("mean", "deviation") ' +
+      'values(' + mean + ', ' + deviation + ')',
+    req.body)
+    .then(function () {
+      res.status(200)
+        .json({
+          status: 'success',
+          message: 'Inserted one cluster'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+
+function removeCluster(req, res, next) {
+  var mean =  parseFloat(req.params.mean);
+  var deviation = parseFloat(req.params.deviation);
+  db.result('delete from sensors."clusters" where "mean" = ' + mean + ' and "deviation" = ' + deviation)
+    .then(function (result) {
+      res.status(200)
+        .json({
+          status: 'success',
+          message: `Removed ${result.rowCount} clusters`
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+function createSensor(req, res, next) {
+  var name = req.params.name;
+  var ID = parseInt(req.params.id);
+  db.none('insert into sensors."sensors"("sensorid", "name") ' +
+      'values(' + ID + ', \'' + name + '\')',
+    req.body)
+    .then(function () {
+      res.status(200)
+        .json({
+          status: 'success',
+          message: 'Inserted one sensor'
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+
+function removeSensor(req, res, next) {
+  var name = req.params.name;
+  db.result('delete from sensors."sensors" where "name" = \'' + name + '\' ')
+    .then(function (result) {
+      res.status(200)
+        .json({
+          status: 'success',
+          message: `Removed ${result.rowCount} sensors`
+        });
+    })
+    .catch(function (err) {
+      return next(err);
+    });
+}
+
+-----------------------------------------------------------------------
+
+
+The second file is here
+https://github.com/lequanha/sensors/blob/master/nodejs-api/routes/index.js
+
+
+[root@ip-172-31-84-126 node-api]# vi routes/index.js
+-----------------------------------------------------------------------
+var express = require('express');
+var router = express.Router();
+
+var db = require('../queries');
+
+router.get('/api/data', db.getAllData);
+router.get('/api/clusters', db.getAllClusters);
+router.get('/api/sensors', db.getAllSensors);
+router.get('/api/data/:id', db.getSingleData);
+router.post('/api/data/:clusterid/:sensorid/:data', db.createData);
+router.get('/api/cluster/:mean/:deviation', db.getClusterID);
+router.post('/api/cluster/:mean/:deviation', db.createCluster);
+router.delete('/api/cluster/:mean/:deviation', db.removeCluster);
+router.post('/api/sensor/:id/:name', db.createSensor);
+router.delete('/api/sensor/:name', db.removeSensor);
+
+module.exports = router;
+
+-----------------------------------------------------------------------
+ 
+
+Finally, please start NodeJS server as this
+[root@ip-172-31-84-126 node-api]# npm start
+
+
